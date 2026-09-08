@@ -556,6 +556,8 @@ dependencies = [
  "tauri-plugin-dialog",
  "tauri-plugin-store",
  "thiserror 2.0.20",
+ "tokio",
+ "tokio-util",
 ]
 
 [[package]]

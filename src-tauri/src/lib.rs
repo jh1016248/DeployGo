@@ -1,5 +1,6 @@
 pub mod commands;
 pub mod error;
+pub mod deploy;
 pub mod inspect;
 pub mod models;
 pub mod store;
@@ -15,6 +16,7 @@ pub fn run() {
         .setup(|app| {
             let repository = store::load_repository(app.handle())?;
             app.manage(Mutex::new(repository));
+            app.manage(deploy::DeploymentRegistry::default());
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

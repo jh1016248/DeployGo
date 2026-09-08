@@ -8,6 +8,8 @@ pub enum AppError {
     NotFound(String),
     #[error("配置保存失败")]
     Storage,
+    #[error("部署已取消")]
+    Cancelled,
 }
 
 impl AppError {
