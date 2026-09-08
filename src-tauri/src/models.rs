@@ -9,7 +9,7 @@ pub enum AuthType { Password, PrivateKey }
 pub struct ServerConfig {
     pub id: String, pub name: String, pub host: String, pub port: u16, pub username: String,
     pub auth_type: AuthType, pub password: Option<String>, pub private_key_path: Option<String>,
-    pub private_key_passphrase: Option<String>, pub deployment_path: String, pub created_at: String, pub updated_at: String,
+    pub private_key_passphrase: Option<String>, pub created_at: String, pub updated_at: String,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]

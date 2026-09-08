@@ -13,7 +13,6 @@ export interface ServerConfig {
   password?: string;
   privateKeyPath?: string;
   privateKeyPassphrase?: string;
-  deploymentPath: string;
   createdAt?: string;
   updatedAt?: string;
 }

@@ -36,7 +36,7 @@ function App() {
           <div><p className="eyebrow">DEPLOYMENT CONSOLE</p><h1>{projects ? "项目" : "服务器"}</h1></div>
           <button aria-label={projects ? "添加项目" : "添加服务器"} className="primary" onClick={() => projects ? setFormOpen(true) : setServerFormOpen(true)}>{projects ? "+ 添加项目" : "+ 添加服务器"}</button>
         </header>
-        {projects ? <Projects projects={configs.projects} servers={configs.servers} activeDeployments={activeDeployments} progress={deployment.progress} onAdd={() => setFormOpen(true)} onDeploy={deployProject} onCancel={cancelProject} /> : <Servers onAdd={() => setServerFormOpen(true)} />}
+        {projects ? <Projects projects={configs.projects} servers={configs.servers} activeDeployments={activeDeployments} progress={deployment.progress} onAdd={() => setFormOpen(true)} onDeploy={deployProject} onCancel={cancelProject} /> : <Servers servers={configs.servers} onAdd={() => setServerFormOpen(true)} />}
       </main>
       {formOpen && <ProjectDialog onClose={() => setFormOpen(false)} />}
       {serverFormOpen && <ServerDialog onClose={() => setServerFormOpen(false)} onSave={saveServer} />}
@@ -56,7 +56,7 @@ function DeploymentPanel({ deploymentId, progress, logs }: { deploymentId: strin
 }
 
 function ProjectDialog({ onClose }: { onClose: () => void }) {
-  const [rootPath, setRootPath] = useState(""); const [buildCommand, setBuildCommand] = useState("pnpm build"); const [outputDirectory, setOutputDirectory] = useState("dist"); const [servers, setServers] = useState<{ id: string; name: string; deploymentPath: string }[]>([]);
+  const [rootPath, setRootPath] = useState(""); const [buildCommand, setBuildCommand] = useState("pnpm build"); const [outputDirectory, setOutputDirectory] = useState("dist"); const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
   useEffect(() => { if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) void configClient.get().then((config) => setServers(config.servers)).catch(() => undefined); }, []);
   const browse = async () => { const path = await configClient.pickProjectDirectory(); if (!path) return; setRootPath(path); const inspected = await configClient.inspectProject(path); const preferredScript = Object.keys(inspected.scripts).find((name) => name === "build") ?? Object.keys(inspected.scripts).find((name) => name.startsWith("build")); if (preferredScript) setBuildCommand(`pnpm ${preferredScript}`); if (inspected.outputCandidates[0]) setOutputDirectory(inspected.outputCandidates[0]); };
   const submit = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); const fields = new FormData(event.currentTarget); await configClient.saveProject({ id: crypto.randomUUID(), name: fields.get("name"), rootPath, buildCommand, outputDirectory, serverId: fields.get("serverId"), remotePath: fields.get("remotePath"), cleanRemoteBeforeDeploy: fields.get("clean") === "on" }); onClose(); };
@@ -70,10 +70,10 @@ function ProjectDialog({ onClose }: { onClose: () => void }) {
 
 function ServerDialog({ onClose, onSave }: { onClose: () => void; onSave: (server: unknown) => void }) {
   const [auth, setAuth] = useState<"password" | "privateKey">("password");
-  const submit = (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); const fields = new FormData(event.currentTarget); const now = new Date().toISOString(); onSave({ id: crypto.randomUUID(), name: fields.get("name"), host: fields.get("host"), port: Number(fields.get("port")), username: fields.get("username"), authType: auth, password: auth === "password" ? fields.get("password") : undefined, privateKeyPath: auth === "privateKey" ? fields.get("privateKeyPath") : undefined, deploymentPath: fields.get("deploymentPath"), createdAt: now, updatedAt: now }); };
+  const submit = (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); const fields = new FormData(event.currentTarget); const now = new Date().toISOString(); onSave({ id: crypto.randomUUID(), name: fields.get("name"), host: fields.get("host"), port: Number(fields.get("port")), username: fields.get("username"), authType: auth, password: auth === "password" ? fields.get("password") : undefined, privateKeyPath: auth === "privateKey" ? fields.get("privateKeyPath") : undefined, createdAt: now, updatedAt: now }); };
   return <div className="dialog-backdrop" role="presentation"><section className="dialog" role="dialog" aria-modal="true" aria-labelledby="server-form-title">
     <header><div><p className="eyebrow">SSH CONNECTION</p><h2 id="server-form-title">添加服务器</h2></div><button className="close" aria-label="关闭表单" onClick={onClose}>×</button></header>
-    <form onSubmit={submit}><div className="form-grid"><label>服务器名称<input name="name" required placeholder="例如：生产环境" /></label><label>主机地址<input name="host" required aria-label="主机地址" placeholder="203.0.113.10" /></label><label>端口<input name="port" type="number" min="1" max="65535" defaultValue="22" /></label><label>用户名<input name="username" required placeholder="deploy" /></label><label className="full-field">默认部署目录<input name="deploymentPath" required placeholder="/var/www/site" /></label></div>
+    <form onSubmit={submit}><div className="form-grid"><label>服务器名称<input name="name" required placeholder="例如：生产环境" /></label><label>主机地址<input name="host" required aria-label="主机地址" placeholder="203.0.113.10" /></label><label>端口<input name="port" type="number" min="1" max="65535" defaultValue="22" /></label><label>用户名<input name="username" required placeholder="deploy" /></label></div>
     <fieldset className="auth-switch"><legend>认证方式</legend><label><input type="radio" checked={auth === "password"} onChange={() => setAuth("password")} /> 密码认证</label><label><input type="radio" checked={auth === "privateKey"} onChange={() => setAuth("privateKey")} /> 私钥认证</label></fieldset>
     {auth === "password" ? <label className="single-field">密码<input name="password" required type="password" placeholder="按你的设置将明文保存于应用配置中" /></label> : <label className="single-field">私钥路径<div className="path-input"><input name="privateKeyPath" required placeholder="选择私钥文件" /><button type="button">浏览</button></div></label>}
     <p className="security-note">⚠ 密码和私钥口令会按当前 MVP 设置以明文保存在应用私有配置文件中，请只在可信设备使用。</p>
@@ -81,12 +81,9 @@ function ServerDialog({ onClose, onSave }: { onClose: () => void; onSave: (serve
   </section></div>;
 }
 
-function Servers({ onAdd }: { onAdd: () => void }) {
-  return <section className="empty-state" aria-label="服务器空状态">
-    <div className="server-glyph">⌁</div><p className="empty-kicker">REMOTE DESTINATIONS</p><h2>还没有服务器</h2>
-    <p className="empty-copy">先保存一个 SSH 服务器配置。部署前可测试连接，<br/>确保凭据与目标目录都可用。</p>
-    <button className="primary wide" onClick={onAdd}>添加服务器 <span>→</span></button>
-  </section>;
+function Servers({ servers, onAdd }: { servers: ServerConfig[]; onAdd: () => void }) {
+  if (servers.length) return <section className="server-grid" aria-label="服务器列表">{servers.map((server) => <article className="server-card" key={server.id}><header><div className="server-glyph">⌁</div><span className="status-badge">已保存</span></header><h2>{server.name}</h2><p className="connection-string">{server.username}@{server.host}:{server.port}</p><dl><div><dt>AUTH</dt><dd>{server.authType === "password" ? "密码认证" : "SSH 私钥"}</dd></div><div><dt>LAST TEST</dt><dd>尚未测试</dd></div></dl><button className="ghost server-test">测试连接</button></article>)}</section>;
+  return <section className="empty-state" aria-label="服务器空状态"><div className="server-glyph">⌁</div><p className="empty-kicker">REMOTE DESTINATIONS</p><h2>还没有服务器</h2><p className="empty-copy">先保存一个 SSH 服务器配置。部署前可测试连接，<br/>确保凭据与目标目录都可用。</p><button className="primary wide" onClick={onAdd}>添加服务器 <span>→</span></button></section>;
 }
 
 export default App;

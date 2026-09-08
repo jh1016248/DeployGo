@@ -5,7 +5,7 @@ fn server() -> ServerConfig {
     ServerConfig {
         id: "srv-1".into(), name: "Production".into(), host: "127.0.0.1".into(),
         port: 22, username: "root".into(), auth_type: AuthType::Password, password: Some("secret".into()),
-        private_key_path: None, private_key_passphrase: None, deployment_path: "/var/www".into(),
+        private_key_path: None, private_key_passphrase: None,
         created_at: "2026-01-01T00:00:00Z".into(), updated_at: "2026-01-01T00:00:00Z".into(),
     }
 }

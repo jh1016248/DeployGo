@@ -14,7 +14,6 @@ describe("server validation", () => {
       host: "请输入 IP 地址",
       username: "请输入用户名",
       privateKeyPath: "请选择私钥文件",
-      deploymentPath: "请输入部署路径",
     });
   });
 
@@ -22,7 +21,7 @@ describe("server validation", () => {
     expect(validateServer({
       ...EMPTY_SERVER,
       name: "Production", host: "192.168.1.1", username: "root",
-      authType: "password", password: "secret", deploymentPath: "/var/www", port: 65536,
+      authType: "password", password: "secret", port: 65536,
     })).toEqual({ port: "端口必须在 1 到 65535 之间" });
   });
 });

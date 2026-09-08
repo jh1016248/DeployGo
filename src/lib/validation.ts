@@ -8,7 +8,6 @@ export function validateServer(server: ServerConfig): FieldErrors {
     ["name", server.name, "请输入服务器名称"],
     ["host", server.host, "请输入 IP 地址"],
     ["username", server.username, "请输入用户名"],
-    ["deploymentPath", server.deploymentPath, "请输入部署路径"],
   ];
   for (const [field, value, message] of fields) {
     const error = required(value, message);
