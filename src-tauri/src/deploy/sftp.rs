@@ -1,7 +1,7 @@
 use std::{fs, io::{self, Read}, path::{Path, PathBuf}};
 use ssh2::Sftp;
 use tokio_util::sync::CancellationToken;
-use crate::{deploy::cancellation_point, error::AppError};
+use crate::{deploy::cancellation_point, error::AppError, models::ServerConfig, ssh};
 
 #[derive(Debug, Clone)]
 pub struct UploadFile { pub absolute_path: PathBuf, pub relative_path: PathBuf }
@@ -18,6 +18,14 @@ fn collect_recursive(root: &Path, current: &Path, files: &mut Vec<UploadFile>) -
         else if path.is_file() { files.push(UploadFile { relative_path: path.strip_prefix(root).map_err(|_| AppError::Validation("输出路径无效".into()))?.to_path_buf(), absolute_path: path }); }
     }
     Ok(())
+}
+
+pub fn upload_output(server: &ServerConfig, local_root: &Path, remote_root: &Path, token: CancellationToken, on_progress: impl FnMut(&UploadFile, usize, usize)) -> Result<(), AppError> {
+    cancellation_point(token.clone())?;
+    let session = ssh::authenticated_session(server)?;
+    cancellation_point(token.clone())?;
+    let sftp = session.sftp().map_err(|_| AppError::Validation("无法建立 SFTP 通道".into()))?;
+    upload_files(&sftp, local_root, remote_root, token, on_progress)
 }
 
 pub fn upload_files(sftp: &Sftp, local_root: &Path, remote_root: &Path, token: CancellationToken, mut on_progress: impl FnMut(&UploadFile, usize, usize)) -> Result<(), AppError> {

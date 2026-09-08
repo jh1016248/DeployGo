@@ -4,7 +4,7 @@ use crate::{error::AppError, models::{AuthType, ServerConfig}};
 
 pub const SSH_TIMEOUT_SECONDS: u64 = 10;
 
-pub fn test_connection(server: &ServerConfig) -> Result<(), AppError> {
+pub fn authenticated_session(server: &ServerConfig) -> Result<Session, AppError> {
     let address: SocketAddr = format!("{}:{}", server.host, server.port).parse().map_err(|_| AppError::Validation("IP 地址或端口格式无效".into()))?;
     let timeout = Duration::from_secs(SSH_TIMEOUT_SECONDS);
     let stream = TcpStream::connect_timeout(&address, timeout).map_err(|error| connection_error(&error.to_string(), server))?;
@@ -17,8 +17,10 @@ pub fn test_connection(server: &ServerConfig) -> Result<(), AppError> {
         AuthType::Password => session.userauth_password(&server.username, server.password.as_deref().unwrap_or_default()),
         AuthType::PrivateKey => session.userauth_pubkey_file(&server.username, None, Path::new(server.private_key_path.as_deref().unwrap_or_default()), server.private_key_passphrase.as_deref()),
     }.map_err(|error| connection_error(&error.to_string(), server))?;
-    if session.authenticated() { Ok(()) } else { Err(AppError::Validation("认证失败：请检查用户名、密码或私钥".into())) }
+    if session.authenticated() { Ok(session) } else { Err(AppError::Validation("认证失败：请检查用户名、密码或私钥".into())) }
 }
+
+pub fn test_connection(server: &ServerConfig) -> Result<(), AppError> { authenticated_session(server).map(|_| ()) }
 
 fn connection_error(raw: &str, server: &ServerConfig) -> AppError { AppError::Validation(friendly_connection_error(raw, &[server.password.as_deref().unwrap_or_default(), server.private_key_passphrase.as_deref().unwrap_or_default()])) }
 
