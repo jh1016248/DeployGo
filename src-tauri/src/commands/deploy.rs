@@ -1,5 +1,5 @@
 use std::{path::Path, sync::Mutex, time::{SystemTime, UNIX_EPOCH}};
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_notification::NotificationExt;
 use crate::{deploy::{build, sftp, DeploymentRegistry}, models::{DeploymentSummary, ProjectConfig, ServerConfig}, store::{persist_repository, ConfigRepository}};
 
@@ -9,14 +9,18 @@ pub async fn start_deployment(app: AppHandle, repository: State<'_, Mutex<Config
     let deployment_id = registry.start(project.id.clone()).await.map_err(String::from)?;
     let token = registry.token(&deployment_id).await.map_err(String::from)?;
     emit(&app, "deployment://progress", &deployment_id, &project.id, serde_json::json!({"phase": "validating", "percent": 0}));
-    let started_at = timestamp();
-    let result = run_deployment(&app, &deployment_id, &project, &server, token).await;
-    let (status, uploaded, error_message) = match &result { Ok(files) => ("success", *files as u64, None), Err(error) if error == "部署已取消" => ("cancelled", 0, Some(error.clone())), Err(error) => ("failed", 0, Some(error.clone())) };
-    update_summary(&app, &repository, &project.id, DeploymentSummary { id: deployment_id.clone(), started_at, finished_at: Some(timestamp()), status: status.into(), files_uploaded: uploaded, error_message: error_message.clone() })?;
-    emit(&app, "deployment://complete", &deployment_id, &project.id, serde_json::json!({"status": status, "filesUploaded": uploaded, "errorMessage": error_message}));
-    if status == "success" { let _ = app.notification().builder().title(format!("{} 部署成功", project.name)).body(format!("已上传 {} 个文件", uploaded)).show(); }
-    registry.finish(&deployment_id).await;
-    result.map(|_| deployment_id)
+    let app_handle = app.clone(); let task_id = deployment_id.clone();
+    tauri::async_runtime::spawn(async move {
+        let started_at = timestamp();
+        let result = run_deployment(&app_handle, &task_id, &project, &server, token).await;
+        let (status, uploaded, error_message) = match &result { Ok(files) => ("success", *files as u64, None), Err(error) if error == "部署已取消" => ("cancelled", 0, Some(error.clone())), Err(error) => ("failed", 0, Some(error.clone())) };
+        let repository = app_handle.state::<Mutex<ConfigRepository>>();
+        if let Err(error) = update_summary(&app_handle, &repository, &project.id, DeploymentSummary { id: task_id.clone(), started_at, finished_at: Some(timestamp()), status: status.into(), files_uploaded: uploaded, error_message: error_message.clone() }) { emit(&app_handle, "deployment://log", &task_id, &project.id, serde_json::json!({"level": "error", "message": error})); }
+        emit(&app_handle, "deployment://complete", &task_id, &project.id, serde_json::json!({"status": status, "filesUploaded": uploaded, "errorMessage": error_message}));
+        if status == "success" { let _ = app_handle.notification().builder().title(format!("{} 部署成功", project.name)).body(format!("已上传 {} 个文件", uploaded)).show(); }
+        app_handle.state::<DeploymentRegistry>().finish(&task_id).await;
+    });
+    Ok(deployment_id)
 }
 
 #[tauri::command]
@@ -31,8 +35,7 @@ fn deployment_config(repository: &State<'_, Mutex<ConfigRepository>>, id: &str) 
 
 async fn run_deployment(app: &AppHandle, deployment_id: &str, project: &ProjectConfig, server: &ServerConfig, token: tokio_util::sync::CancellationToken) -> Result<usize, String> {
     emit(app, "deployment://progress", deployment_id, &project.id, serde_json::json!({"phase": "building", "percent": 5}));
-    let lines = build::run_build(project, token.clone()).await.map_err(String::from)?;
-    for line in lines { emit(app, "deployment://log", deployment_id, &project.id, serde_json::json!({"level": "info", "message": line})); }
+    build::run_build(project, token.clone(), |line| emit(app, "deployment://log", deployment_id, &project.id, serde_json::json!({"level": "info", "message": line}))).await.map_err(String::from)?;
     emit(app, "deployment://progress", deployment_id, &project.id, serde_json::json!({"phase": "uploading", "percent": 30}));
     let app_handle = app.clone(); let id = deployment_id.to_owned(); let project_id = project.id.clone(); let server = server.clone(); let output = Path::new(&project.root_path).join(&project.output_directory); let remote = project.remote_path.clone(); let clean_remote = project.clean_remote_before_deploy;
     tauri::async_runtime::spawn_blocking(move || {
