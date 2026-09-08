@@ -3,6 +3,7 @@ use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use crate::error::AppError;
 pub mod build;
+pub mod sftp;
 
 static NEXT_DEPLOYMENT: AtomicU64 = AtomicU64::new(1);
 
