@@ -65,3 +65,16 @@ test("opens a saved server in edit mode", async () => {
   expect(screen.getByRole("heading", { name: "编辑服务器" })).toBeVisible();
   expect(screen.getByLabelText("主机地址")).toHaveValue("198.51.100.20");
 });
+
+test("opens a saved project in edit mode", async () => {
+  const user = userEvent.setup();
+  (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
+  const server = { id: "srv-3", name: "生产", host: "203.0.113.10", port: 22, username: "deploy", authType: "password", password: "secret", createdAt: "2026-01-01", updatedAt: "2026-01-01" };
+  const project = { id: "project-3", name: "官网", rootPath: "/tmp/site", buildCommand: "pnpm build", outputDirectory: "dist", serverId: "srv-3", remotePath: "/var/www/site", cleanRemoteBeforeDeploy: false };
+  apiMocks.invoke.mockImplementation((command: string) => command === "get_configs" ? Promise.resolve({ servers: [server], projects: [project] }) : Promise.resolve(null));
+  render(<App />);
+  await screen.findByText("官网");
+  await user.click(screen.getByRole("button", { name: "编辑项目" }));
+  expect(screen.getByRole("heading", { name: "编辑项目" })).toBeVisible();
+  expect(screen.getByLabelText("打包命令")).toHaveValue("pnpm build");
+});
