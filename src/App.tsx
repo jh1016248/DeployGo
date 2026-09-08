@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useDeploymentEvents } from "./hooks/use-deployment-events";
 
 type Page = "projects" | "servers";
 
@@ -8,6 +9,8 @@ function App() {
   const [formOpen, setFormOpen] = useState(false);
   const [serverFormOpen, setServerFormOpen] = useState(false);
   const projects = page === "projects";
+  const deployment = useDeploymentEvents();
+  const activeDeployment = Object.entries(deployment.progress).at(-1);
 
   return (
     <div className="app-shell">
@@ -28,6 +31,7 @@ function App() {
       </main>
       {formOpen && <ProjectDialog onClose={() => setFormOpen(false)} />}
       {serverFormOpen && <ServerDialog onClose={() => setServerFormOpen(false)} />}
+      {activeDeployment && <DeploymentPanel deploymentId={activeDeployment[0]} progress={activeDeployment[1]} logs={deployment.logs[activeDeployment[0]] ?? []} />}
       {notice && <div className="toast" role="status"><span>✦</span> 配置表单将在下一步连接本地配置服务 <button aria-label="关闭提示" onClick={() => setNotice(false)}>×</button></div>}
     </div>
   );
@@ -45,6 +49,10 @@ function Projects({ onAdd }: { onAdd: () => void }) {
     <button className="primary wide" onClick={onAdd}>添加项目 <span>→</span></button>
     <div className="flow-hint"><span>01 配置项目</span><i/> <span>02 连接服务器</span><i/> <span>03 一键部署</span></div>
   </section>;
+}
+
+function DeploymentPanel({ deploymentId, progress, logs }: { deploymentId: string; progress: { phase: string; percent?: number; file?: string }; logs: { level: string; message: string }[] }) {
+  return <aside className="log-panel" aria-label="部署日志"><header><div><p className="eyebrow">LIVE DEPLOYMENT · {deploymentId}</p><b>{progress.phase}</b></div><strong>{progress.percent ?? 0}%</strong></header><div className="progress-track"><i style={{ width: `${progress.percent ?? 0}%` }} /></div>{progress.file && <p className="current-file">{progress.file}</p>}<div className="log-lines">{logs.map((log, index) => <p key={index} data-level={log.level}><span>{log.level}</span>{log.message}</p>)}</div></aside>;
 }
 
 function ProjectDialog({ onClose }: { onClose: () => void }) {
