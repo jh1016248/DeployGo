@@ -2,6 +2,7 @@ use std::{collections::HashMap, sync::atomic::{AtomicU64, Ordering}};
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 use crate::error::AppError;
+pub mod build;
 
 static NEXT_DEPLOYMENT: AtomicU64 = AtomicU64::new(1);
 
