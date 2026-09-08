@@ -1,0 +1,6 @@
+{
+  "scripts": {
+    "build": "vite build",
+    "build:prod": "vite build --mode production"
+  }
+}
