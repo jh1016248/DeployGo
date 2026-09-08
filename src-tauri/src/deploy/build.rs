@@ -47,6 +47,19 @@ async fn read_lines<R: AsyncRead + Unpin>(reader: R, sender: mpsc::UnboundedSend
 }
 
 #[cfg(target_os = "windows")]
-fn shell_command(command: &str) -> Command { let mut process = Command::new("cmd"); process.args(["/C", command]); process }
-#[cfg(not(target_os = "windows"))]
-fn shell_command(command: &str) -> Command { let mut process = Command::new("sh"); process.args(["-c", command]); process }
+fn shell_spec(command: &str) -> (&'static str, [&str; 2]) { ("cmd", ["/C", command]) }
+#[cfg(target_os = "macos")]
+fn shell_spec(command: &str) -> (&'static str, [&str; 2]) { ("/bin/zsh", ["-lic", command]) }
+#[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+fn shell_spec(command: &str) -> (&'static str, [&str; 2]) { ("sh", ["-c", command]) }
+fn shell_command(command: &str) -> Command { let (program, args) = shell_spec(command); let mut process = Command::new(program); process.args(args); process }
+
+#[cfg(test)]
+mod tests {
+    use super::shell_spec;
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn macos_uses_a_login_interactive_zsh_for_node_toolchains() {
+        assert_eq!(shell_spec("pnpm build"), ("/bin/zsh", ["-lic", "pnpm build"]));
+    }
+}

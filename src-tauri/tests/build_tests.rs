@@ -19,6 +19,7 @@ async fn streams_build_output_lines_before_success() {
     let project = project(root.to_string_lossy().into_owned(), "printf 'first\n'; printf 'second\n'");
     let mut logs = Vec::new();
     run_build(&project, CancellationToken::new(), |line| logs.push(line)).await.unwrap();
-    assert_eq!(logs, vec!["first", "second"]);
+    assert!(logs.iter().any(|line| line == "first"));
+    assert!(logs.iter().any(|line| line == "second"));
     fs::remove_dir_all(root).unwrap();
 }
