@@ -17,6 +17,8 @@ button { font: inherit; }
 .card-progress { height:4px; overflow:hidden; margin-top:20px; border-radius:99px; background:#183738; }.card-progress i { display:block; height:100%; background:#58dfbb; transition:width .25s ease; }.cancel-button { width:100%; margin-top:10px; padding:10px; border-color:#70494a; color:#f4aaaa; }
 .server-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:16px; padding:42px 0; }.server-card { padding:19px; border:1px solid #264a4c; border-radius:12px; background:linear-gradient(145deg,#10282a,#0a1a1c); }.server-card header { display:flex; align-items:center; justify-content:space-between; }.server-card .server-glyph { width:42px; height:42px; margin:0; border-radius:11px; font-size:22px; }.server-card h2 { margin:17px 0 3px; font-size:18px; }.connection-string { margin:0; color:#75a8a1; font:11px ui-monospace,monospace; }.server-card dl { display:grid; gap:11px; margin:22px 0; }.server-card dt { color:#618788; font:700 9px ui-monospace,monospace; letter-spacing:1px; }.server-card dd { margin:4px 0 0; color:#c6dbd9; font-size:12px; }.server-test { width:100%; padding:10px; }
 .test-result { margin:12px 0 0; color:#68dfbe; font-size:12px; }
+.server-actions { display:grid; grid-template-columns:1fr 1fr; gap:8px; }.server-edit { padding:10px; }
+
 
 
 
