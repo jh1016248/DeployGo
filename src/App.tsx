@@ -15,8 +15,9 @@ function App() {
   const projects = page === "projects";
   const deployment = useDeploymentEvents();
   const activeDeployment = Object.entries(deployment.progress).at(-1);
-  useEffect(() => { if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) void configClient.get().then(setConfigs).catch(() => undefined); }, []);
-  const saveServer = async (server: unknown) => { try { await configClient.saveServer(server); setServerFormOpen(false); setNotice(true); } catch { setNotice(true); } };
+  const loadConfigs = async () => { if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) setConfigs(await configClient.get()); };
+  useEffect(() => { void loadConfigs().catch(() => undefined); }, []);
+  const saveServer = async (server: unknown) => { try { await configClient.saveServer(server); await loadConfigs(); setServerFormOpen(false); setNotice(true); } catch { setNotice(true); } };
   const deployProject = async (projectId: string) => { try { const deploymentId = await deploymentClient.start(projectId); setActiveDeployments((current) => ({ ...current, [projectId]: deploymentId })); setNotice(true); } catch { setNotice(true); } };
   const cancelProject = async (projectId: string) => { const deploymentId = activeDeployments[projectId]; if (!deploymentId) return; await deploymentClient.cancel(deploymentId); };
   useEffect(() => { const completeIds = new Set(Object.keys(deployment.completed)); setActiveDeployments((current) => Object.fromEntries(Object.entries(current).filter(([, id]) => !completeIds.has(id)))); }, [deployment.completed]);
@@ -38,7 +39,7 @@ function App() {
         </header>
         {projects ? <Projects projects={configs.projects} servers={configs.servers} activeDeployments={activeDeployments} progress={deployment.progress} onAdd={() => setFormOpen(true)} onDeploy={deployProject} onCancel={cancelProject} /> : <Servers servers={configs.servers} onAdd={() => setServerFormOpen(true)} />}
       </main>
-      {formOpen && <ProjectDialog onClose={() => setFormOpen(false)} />}
+      {formOpen && <ProjectDialog onClose={() => setFormOpen(false)} onSaved={() => void loadConfigs()} />}
       {serverFormOpen && <ServerDialog onClose={() => setServerFormOpen(false)} onSave={saveServer} />}
       {activeDeployment && <DeploymentPanel deploymentId={activeDeployment[0]} progress={activeDeployment[1]} logs={deployment.logs[activeDeployment[0]] ?? []} />}
       {notice && <div className="toast" role="status"><span>✦</span> 配置表单将在下一步连接本地配置服务 <button aria-label="关闭提示" onClick={() => setNotice(false)}>×</button></div>}
@@ -55,11 +56,11 @@ function DeploymentPanel({ deploymentId, progress, logs }: { deploymentId: strin
   return <aside className="log-panel" aria-label="部署日志"><header><div><p className="eyebrow">LIVE DEPLOYMENT · {deploymentId}</p><b>{progress.phase}</b></div><strong>{progress.percent ?? 0}%</strong></header><div className="progress-track"><i style={{ width: `${progress.percent ?? 0}%` }} /></div>{progress.file && <p className="current-file">{progress.file}</p>}<div className="log-lines">{logs.map((log, index) => <p key={index} data-level={log.level}><span>{log.level}</span>{log.message}</p>)}</div></aside>;
 }
 
-function ProjectDialog({ onClose }: { onClose: () => void }) {
+function ProjectDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
   const [rootPath, setRootPath] = useState(""); const [buildCommand, setBuildCommand] = useState("pnpm build"); const [outputDirectory, setOutputDirectory] = useState("dist"); const [servers, setServers] = useState<{ id: string; name: string }[]>([]);
   useEffect(() => { if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) void configClient.get().then((config) => setServers(config.servers)).catch(() => undefined); }, []);
   const browse = async () => { const path = await configClient.pickProjectDirectory(); if (!path) return; setRootPath(path); const inspected = await configClient.inspectProject(path); const preferredScript = Object.keys(inspected.scripts).find((name) => name === "build") ?? Object.keys(inspected.scripts).find((name) => name.startsWith("build")); if (preferredScript) setBuildCommand(`pnpm ${preferredScript}`); if (inspected.outputCandidates[0]) setOutputDirectory(inspected.outputCandidates[0]); };
-  const submit = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); const fields = new FormData(event.currentTarget); await configClient.saveProject({ id: crypto.randomUUID(), name: fields.get("name"), rootPath, buildCommand, outputDirectory, serverId: fields.get("serverId"), remotePath: fields.get("remotePath"), cleanRemoteBeforeDeploy: fields.get("clean") === "on" }); onClose(); };
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); const fields = new FormData(event.currentTarget); await configClient.saveProject({ id: crypto.randomUUID(), name: fields.get("name"), rootPath, buildCommand, outputDirectory, serverId: fields.get("serverId"), remotePath: fields.get("remotePath"), cleanRemoteBeforeDeploy: fields.get("clean") === "on" }); onSaved(); onClose(); };
   return <div className="dialog-backdrop" role="presentation"><section className="dialog" role="dialog" aria-modal="true" aria-labelledby="project-form-title">
     <header><div><p className="eyebrow">NEW DEPLOYMENT TARGET</p><h2 id="project-form-title">添加项目</h2></div><button className="close" aria-label="关闭表单" onClick={onClose}>×</button></header>
     <form onSubmit={(event) => void submit(event)}><div className="form-grid"><label>项目名称<input name="name" required placeholder="例如：官网前端" /></label><label>本地项目文件夹<div className="path-input"><input value={rootPath} readOnly placeholder="选择项目根目录" /><button type="button" onClick={() => void browse()}>浏览</button></div></label><label>打包命令<input aria-label="打包命令" value={buildCommand} onChange={(event) => setBuildCommand(event.target.value)} /></label><label>输出目录<input value={outputDirectory} onChange={(event) => setOutputDirectory(event.target.value)} /></label><label>服务器<select name="serverId" required defaultValue=""><option value="" disabled>请选择已保存的服务器</option>{servers.map((server) => <option value={server.id} key={server.id}>{server.name}</option>)}</select></label><label>服务器目录<input name="remotePath" required placeholder="/var/www/site" /></label></div>
