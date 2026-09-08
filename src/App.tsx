@@ -11,12 +11,15 @@ function App() {
   const [formOpen, setFormOpen] = useState(false);
   const [serverFormOpen, setServerFormOpen] = useState(false);
   const [configs, setConfigs] = useState<{ servers: ServerConfig[]; projects: ProjectConfig[] }>({ servers: [], projects: [] });
+  const [activeDeployments, setActiveDeployments] = useState<Record<string, string>>({});
   const projects = page === "projects";
   const deployment = useDeploymentEvents();
   const activeDeployment = Object.entries(deployment.progress).at(-1);
   useEffect(() => { if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) void configClient.get().then(setConfigs).catch(() => undefined); }, []);
   const saveServer = async (server: unknown) => { try { await configClient.saveServer(server); setServerFormOpen(false); setNotice(true); } catch { setNotice(true); } };
-  const deployProject = async (projectId: string) => { try { await deploymentClient.start(projectId); setNotice(true); } catch { setNotice(true); } };
+  const deployProject = async (projectId: string) => { try { const deploymentId = await deploymentClient.start(projectId); setActiveDeployments((current) => ({ ...current, [projectId]: deploymentId })); setNotice(true); } catch { setNotice(true); } };
+  const cancelProject = async (projectId: string) => { const deploymentId = activeDeployments[projectId]; if (!deploymentId) return; await deploymentClient.cancel(deploymentId); };
+  useEffect(() => { const completeIds = new Set(Object.keys(deployment.completed)); setActiveDeployments((current) => Object.fromEntries(Object.entries(current).filter(([, id]) => !completeIds.has(id)))); }, [deployment.completed]);
 
   return (
     <div className="app-shell">
@@ -33,7 +36,7 @@ function App() {
           <div><p className="eyebrow">DEPLOYMENT CONSOLE</p><h1>{projects ? "项目" : "服务器"}</h1></div>
           <button aria-label={projects ? "添加项目" : "添加服务器"} className="primary" onClick={() => projects ? setFormOpen(true) : setServerFormOpen(true)}>{projects ? "+ 添加项目" : "+ 添加服务器"}</button>
         </header>
-        {projects ? <Projects projects={configs.projects} servers={configs.servers} onAdd={() => setFormOpen(true)} onDeploy={deployProject} /> : <Servers onAdd={() => setServerFormOpen(true)} />}
+        {projects ? <Projects projects={configs.projects} servers={configs.servers} activeDeployments={activeDeployments} progress={deployment.progress} onAdd={() => setFormOpen(true)} onDeploy={deployProject} onCancel={cancelProject} /> : <Servers onAdd={() => setServerFormOpen(true)} />}
       </main>
       {formOpen && <ProjectDialog onClose={() => setFormOpen(false)} />}
       {serverFormOpen && <ServerDialog onClose={() => setServerFormOpen(false)} onSave={saveServer} />}
@@ -43,8 +46,8 @@ function App() {
   );
 }
 
-function Projects({ projects, servers, onAdd, onDeploy }: { projects: ProjectConfig[]; servers: ServerConfig[]; onAdd: () => void; onDeploy: (id: string) => void }) {
-  if (projects.length) return <section className="project-grid" aria-label="项目列表">{projects.map((project) => { const server = servers.find((item) => item.id === project.serverId); return <article className="project-card" key={project.id}><header><div><p className="eyebrow">READY TO DEPLOY</p><h2>{project.name}</h2></div><span className="status-badge">待部署</span></header><dl><div><dt>BUILD</dt><dd>{project.buildCommand}</dd></div><div><dt>TARGET</dt><dd>{server?.name ?? "未配置服务器"} · {project.remotePath}</dd></div><div><dt>LAST DEPLOY</dt><dd>{project.lastDeployment?.finishedAt ?? "尚未部署"}</dd></div></dl><button className="primary deploy-button" onClick={() => void onDeploy(project.id)}>部署 <span>→</span></button></article>; })}</section>;
+function Projects({ projects, servers, activeDeployments, progress, onAdd, onDeploy, onCancel }: { projects: ProjectConfig[]; servers: ServerConfig[]; activeDeployments: Record<string, string>; progress: Record<string, { phase: string; percent?: number }>; onAdd: () => void; onDeploy: (id: string) => void; onCancel: (id: string) => void }) {
+  if (projects.length) return <section className="project-grid" aria-label="项目列表">{projects.map((project) => { const server = servers.find((item) => item.id === project.serverId); const deploymentId = activeDeployments[project.id]; const current = deploymentId ? progress[deploymentId] : undefined; return <article className="project-card" key={project.id}><header><div><p className="eyebrow">{current ? "DEPLOYMENT RUNNING" : "READY TO DEPLOY"}</p><h2>{project.name}</h2></div><span className="status-badge">{current ? current.phase : "待部署"}</span></header><dl><div><dt>BUILD</dt><dd>{project.buildCommand}</dd></div><div><dt>TARGET</dt><dd>{server?.name ?? "未配置服务器"} · {project.remotePath}</dd></div><div><dt>LAST DEPLOY</dt><dd>{project.lastDeployment?.finishedAt ?? "尚未部署"}</dd></div></dl>{current ? <><div className="card-progress"><i style={{ width: (current.percent ?? 0) + "%" }} /></div><button className="ghost cancel-button" onClick={() => void onCancel(project.id)}>取消部署</button></> : <button className="primary deploy-button" onClick={() => void onDeploy(project.id)}>部署 <span>→</span></button>}</article>; })}</section>;
   return <section className="empty-state" aria-label="项目空状态"><div className="terminal-card"><div className="terminal-chrome"><i/><i/><i/><span>deploygo / projects</span></div><div className="terminal-body"><span className="prompt">›</span><span className="typing">等待部署目标...</span><span className="cursor">_</span></div></div><p className="empty-kicker">YOUR DEPLOYMENT QUEUE IS EMPTY</p><h2>暂无项目</h2><p className="empty-copy">添加本地前端项目，保存构建命令与 SSH 目标，<br/>下一次发布只需一次点击。</p><button className="primary wide" onClick={onAdd}>添加项目 <span>→</span></button><div className="flow-hint"><span>01 配置项目</span><i/> <span>02 连接服务器</span><i/> <span>03 一键部署</span></div></section>;
 }
 
