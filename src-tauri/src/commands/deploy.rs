@@ -1,5 +1,6 @@
 use std::{path::Path, sync::Mutex, time::{SystemTime, UNIX_EPOCH}};
 use tauri::{AppHandle, Emitter, State};
+use tauri_plugin_notification::NotificationExt;
 use crate::{deploy::{build, sftp, DeploymentRegistry}, models::{DeploymentSummary, ProjectConfig, ServerConfig}, store::{persist_repository, ConfigRepository}};
 
 #[tauri::command]
@@ -13,6 +14,7 @@ pub async fn start_deployment(app: AppHandle, repository: State<'_, Mutex<Config
     let (status, uploaded, error_message) = match &result { Ok(files) => ("success", *files as u64, None), Err(error) if error == "部署已取消" => ("cancelled", 0, Some(error.clone())), Err(error) => ("failed", 0, Some(error.clone())) };
     update_summary(&app, &repository, &project.id, DeploymentSummary { id: deployment_id.clone(), started_at, finished_at: Some(timestamp()), status: status.into(), files_uploaded: uploaded, error_message: error_message.clone() })?;
     emit(&app, "deployment://complete", &deployment_id, &project.id, serde_json::json!({"status": status, "filesUploaded": uploaded, "errorMessage": error_message}));
+    if status == "success" { let _ = app.notification().builder().title(format!("{} 部署成功", project.name)).body(format!("已上传 {} 个文件", uploaded)).show(); }
     registry.finish(&deployment_id).await;
     result.map(|_| deployment_id)
 }
