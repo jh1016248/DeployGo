@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useDeploymentEvents } from "./hooks/use-deployment-events";
 import { configClient, deploymentClient } from "./lib/tauri";
 import type { ProjectConfig, ServerConfig } from "./lib/types";
@@ -69,15 +69,18 @@ function ProjectDialog({ onClose }: { onClose: () => void }) {
 }
 
 function ServerDialog({ onClose, onSave }: { onClose: () => void; onSave: (server: unknown) => void }) {
-  const [auth, setAuth] = useState<"password" | "privateKey">("password");
-  const submit = (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); const fields = new FormData(event.currentTarget); const now = new Date().toISOString(); onSave({ id: crypto.randomUUID(), name: fields.get("name"), host: fields.get("host"), port: Number(fields.get("port")), username: fields.get("username"), authType: auth, password: auth === "password" ? fields.get("password") : undefined, privateKeyPath: auth === "privateKey" ? fields.get("privateKeyPath") : undefined, createdAt: now, updatedAt: now }); };
+  const [auth, setAuth] = useState<"password" | "privateKey">("password"); const [privateKeyPath, setPrivateKeyPath] = useState(""); const [testResult, setTestResult] = useState(""); const formRef = useRef<HTMLFormElement>(null);
+  const buildServer = (fields: FormData) => { const now = new Date().toISOString(); return { id: crypto.randomUUID(), name: fields.get("name"), host: fields.get("host"), port: Number(fields.get("port")), username: fields.get("username"), authType: auth, password: auth === "password" ? fields.get("password") : undefined, privateKeyPath: auth === "privateKey" ? privateKeyPath : undefined, createdAt: now, updatedAt: now }; };
+  const submit = (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); onSave(buildServer(new FormData(event.currentTarget))); };
+  const testConnection = async () => { if (!formRef.current?.reportValidity()) return; setTestResult("正在测试连接…"); try { await configClient.testConnection(buildServer(new FormData(formRef.current))); setTestResult("连接成功"); } catch (error) { setTestResult(error instanceof Error ? error.message : "连接失败，请检查配置"); } };
+  const browseKey = async () => { const path = await configClient.pickPrivateKey(); if (path) setPrivateKeyPath(path); };
   return <div className="dialog-backdrop" role="presentation"><section className="dialog" role="dialog" aria-modal="true" aria-labelledby="server-form-title">
     <header><div><p className="eyebrow">SSH CONNECTION</p><h2 id="server-form-title">添加服务器</h2></div><button className="close" aria-label="关闭表单" onClick={onClose}>×</button></header>
-    <form onSubmit={submit}><div className="form-grid"><label>服务器名称<input name="name" required placeholder="例如：生产环境" /></label><label>主机地址<input name="host" required aria-label="主机地址" placeholder="203.0.113.10" /></label><label>端口<input name="port" type="number" min="1" max="65535" defaultValue="22" /></label><label>用户名<input name="username" required placeholder="deploy" /></label></div>
+    <form ref={formRef} onSubmit={submit}><div className="form-grid"><label>服务器名称<input name="name" required placeholder="例如：生产环境" /></label><label>主机地址<input name="host" required aria-label="主机地址" placeholder="203.0.113.10" /></label><label>端口<input name="port" type="number" min="1" max="65535" defaultValue="22" /></label><label>用户名<input name="username" required placeholder="deploy" /></label></div>
     <fieldset className="auth-switch"><legend>认证方式</legend><label><input type="radio" checked={auth === "password"} onChange={() => setAuth("password")} /> 密码认证</label><label><input type="radio" checked={auth === "privateKey"} onChange={() => setAuth("privateKey")} /> 私钥认证</label></fieldset>
-    {auth === "password" ? <label className="single-field">密码<input name="password" required type="password" placeholder="按你的设置将明文保存于应用配置中" /></label> : <label className="single-field">私钥路径<div className="path-input"><input name="privateKeyPath" required placeholder="选择私钥文件" /><button type="button">浏览</button></div></label>}
-    <p className="security-note">⚠ 密码和私钥口令会按当前 MVP 设置以明文保存在应用私有配置文件中，请只在可信设备使用。</p>
-    <footer><button className="ghost" type="button" onClick={onClose}>取消</button><button className="ghost" type="button">测试连接</button><button className="primary" type="submit">保存服务器</button></footer></form>
+    {auth === "password" ? <label className="single-field">密码<input name="password" required type="password" placeholder="按你的设置将明文保存于应用配置中" /></label> : <label className="single-field">私钥路径<div className="path-input"><input value={privateKeyPath} readOnly required placeholder="选择私钥文件" /><button type="button" onClick={() => void browseKey()}>浏览</button></div></label>}
+    <p className="security-note">⚠ 密码和私钥口令会按当前 MVP 设置以明文保存在应用私有配置文件中，请只在可信设备使用。</p>{testResult && <p className="test-result" role="status">{testResult}</p>}
+    <footer><button className="ghost" type="button" onClick={onClose}>取消</button><button className="ghost" type="button" onClick={() => void testConnection()}>测试连接</button><button className="primary" type="submit">保存服务器</button></footer></form>
   </section></div>;
 }
 
