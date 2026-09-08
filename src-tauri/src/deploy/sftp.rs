@@ -20,12 +20,26 @@ fn collect_recursive(root: &Path, current: &Path, files: &mut Vec<UploadFile>) -
     Ok(())
 }
 
-pub fn upload_output(server: &ServerConfig, local_root: &Path, remote_root: &Path, token: CancellationToken, on_progress: impl FnMut(&UploadFile, usize, usize)) -> Result<(), AppError> {
-    cancellation_point(token.clone())?;
-    let session = ssh::authenticated_session(server)?;
-    cancellation_point(token.clone())?;
+pub fn upload_output(server: &ServerConfig, local_root: &Path, remote_root: &Path, token: CancellationToken, on_progress: impl FnMut(&UploadFile, usize, usize)) -> Result<(), AppError> { deploy_output(server, local_root, remote_root, false, token, on_progress) }
+
+pub fn deploy_output(server: &ServerConfig, local_root: &Path, remote_root: &Path, clean_remote: bool, token: CancellationToken, on_progress: impl FnMut(&UploadFile, usize, usize)) -> Result<(), AppError> {
+    cancellation_point(token.clone())?; let session = ssh::authenticated_session(server)?; cancellation_point(token.clone())?;
     let sftp = session.sftp().map_err(|_| AppError::Validation("无法建立 SFTP 通道".into()))?;
+    if clean_remote { clear_remote_directory(&sftp, remote_root, token.clone())?; }
     upload_files(&sftp, local_root, remote_root, token, on_progress)
+}
+
+pub fn clear_remote_directory(sftp: &Sftp, directory: &Path, token: CancellationToken) -> Result<(), AppError> {
+    cancellation_point(token.clone())?;
+    let entries = match sftp.readdir(directory) { Ok(entries) => entries, Err(_) => return Ok(()) };
+    for (path, stat) in entries {
+        cancellation_point(token.clone())?;
+        let name = path.file_name().and_then(|item| item.to_str()).unwrap_or_default();
+        if name == "." || name == ".." { continue; }
+        if stat.is_dir() { clear_remote_directory(sftp, &path, token.clone())?; sftp.rmdir(&path).map_err(|_| AppError::Validation(format!("无法删除远程目录 {}", path.display())))?; }
+        else { sftp.unlink(&path).map_err(|_| AppError::Validation(format!("无法删除远程文件 {}", path.display())))?; }
+    }
+    Ok(())
 }
 
 pub fn upload_files(sftp: &Sftp, local_root: &Path, remote_root: &Path, token: CancellationToken, mut on_progress: impl FnMut(&UploadFile, usize, usize)) -> Result<(), AppError> {

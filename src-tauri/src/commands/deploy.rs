@@ -34,9 +34,9 @@ async fn run_deployment(app: &AppHandle, deployment_id: &str, project: &ProjectC
     let lines = build::run_build(project, token.clone()).await.map_err(String::from)?;
     for line in lines { emit(app, "deployment://log", deployment_id, &project.id, serde_json::json!({"level": "info", "message": line})); }
     emit(app, "deployment://progress", deployment_id, &project.id, serde_json::json!({"phase": "uploading", "percent": 30}));
-    let app_handle = app.clone(); let id = deployment_id.to_owned(); let project_id = project.id.clone(); let server = server.clone(); let output = Path::new(&project.root_path).join(&project.output_directory); let remote = project.remote_path.clone();
+    let app_handle = app.clone(); let id = deployment_id.to_owned(); let project_id = project.id.clone(); let server = server.clone(); let output = Path::new(&project.root_path).join(&project.output_directory); let remote = project.remote_path.clone(); let clean_remote = project.clean_remote_before_deploy;
     tauri::async_runtime::spawn_blocking(move || {
-        let mut total = 0; sftp::upload_output(&server, &output, Path::new(&remote), token, |file, current, count| { total = count; let percent = 30 + ((current * 70) / count.max(1)); emit(&app_handle, "deployment://progress", &id, &project_id, serde_json::json!({"phase": "uploading", "file": file.relative_path, "completedFiles": current, "totalFiles": count, "percent": percent})); }).map(|_| total)
+        let mut total = 0; sftp::deploy_output(&server, &output, Path::new(&remote), clean_remote, token, |file, current, count| { total = count; let percent = 30 + ((current * 70) / count.max(1)); emit(&app_handle, "deployment://progress", &id, &project_id, serde_json::json!({"phase": "uploading", "file": file.relative_path, "completedFiles": current, "totalFiles": count, "percent": percent})); }).map(|_| total)
     }).await.map_err(|_| "上传任务异常结束".to_string())?.map_err(String::from)
 }
 
