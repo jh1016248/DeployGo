@@ -5,6 +5,7 @@ type Page = "projects" | "servers";
 function App() {
   const [page, setPage] = useState<Page>("projects");
   const [notice, setNotice] = useState(false);
+  const [formOpen, setFormOpen] = useState(false);
   const projects = page === "projects";
 
   return (
@@ -20,10 +21,11 @@ function App() {
       <main className="workspace">
         <header className="topbar">
           <div><p className="eyebrow">DEPLOYMENT CONSOLE</p><h1>{projects ? "项目" : "服务器"}</h1></div>
-          <button aria-label={projects ? "添加项目" : "添加服务器"} className="primary" onClick={() => setNotice(true)}>{projects ? "+ 添加项目" : "+ 添加服务器"}</button>
+          <button aria-label={projects ? "添加项目" : "添加服务器"} className="primary" onClick={() => projects ? setFormOpen(true) : setNotice(true)}>{projects ? "+ 添加项目" : "+ 添加服务器"}</button>
         </header>
-        {projects ? <Projects onAdd={() => setNotice(true)} /> : <Servers onAdd={() => setNotice(true)} />}
+        {projects ? <Projects onAdd={() => setFormOpen(true)} /> : <Servers onAdd={() => setNotice(true)} />}
       </main>
+      {formOpen && <ProjectDialog onClose={() => setFormOpen(false)} />}
       {notice && <div className="toast" role="status"><span>✦</span> 配置表单将在下一步连接本地配置服务 <button aria-label="关闭提示" onClick={() => setNotice(false)}>×</button></div>}
     </div>
   );
@@ -41,6 +43,15 @@ function Projects({ onAdd }: { onAdd: () => void }) {
     <button className="primary wide" onClick={onAdd}>添加项目 <span>→</span></button>
     <div className="flow-hint"><span>01 配置项目</span><i/> <span>02 连接服务器</span><i/> <span>03 一键部署</span></div>
   </section>;
+}
+
+function ProjectDialog({ onClose }: { onClose: () => void }) {
+  return <div className="dialog-backdrop" role="presentation"><section className="dialog" role="dialog" aria-modal="true" aria-labelledby="project-form-title">
+    <header><div><p className="eyebrow">NEW DEPLOYMENT TARGET</p><h2 id="project-form-title">添加项目</h2></div><button className="close" aria-label="关闭表单" onClick={onClose}>×</button></header>
+    <div className="form-grid"><label>项目名称<input placeholder="例如：官网前端" /></label><label>本地项目文件夹<div className="path-input"><input placeholder="选择项目根目录" /><button type="button">浏览</button></div></label><label>打包命令<input aria-label="打包命令" defaultValue="pnpm build" /></label><label>输出目录<input defaultValue="dist" /></label><label>服务器<select defaultValue=""><option value="" disabled>请选择已保存的服务器</option></select></label><label>服务器目录<input placeholder="/var/www/site" /></label></div>
+    <label className="danger-row"><input type="checkbox" /> <span><b>部署前清空远程目录</b><small>此操作不可恢复，默认使用增量覆盖。</small></span></label>
+    <footer><button className="ghost" onClick={onClose}>取消</button><button className="primary" onClick={onClose}>保存项目</button></footer>
+  </section></div>;
 }
 
 function Servers({ onAdd }: { onAdd: () => void }) {

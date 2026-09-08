@@ -15,3 +15,11 @@ test("switches to the server page from navigation", async () => {
   await user.click(screen.getByRole("button", { name: "服务器" }));
   expect(screen.getByRole("heading", { name: "服务器" })).toBeVisible();
 });
+
+test("opens the project configuration form", async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  await user.click(screen.getByRole("button", { name: "添加项目" }));
+  expect(screen.getByRole("heading", { name: "添加项目" })).toBeVisible();
+  expect(screen.getByLabelText("打包命令")).toBeVisible();
+});
