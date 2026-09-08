@@ -24,7 +24,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::config::get_configs, commands::config::save_server, commands::config::delete_server,
             commands::config::save_project, commands::config::delete_project,
-            commands::project::inspect_project, commands::server::test_ssh_connection,
+            commands::project::inspect_project, commands::project::pick_project_directory, commands::project::pick_private_key, commands::server::test_ssh_connection,
             commands::deploy::start_deployment, commands::deploy::cancel_deployment
         ])
         .run(tauri::generate_context!())

@@ -10,6 +10,8 @@ export const configClient = {
   saveProject: (project: unknown) => invoke<void>("save_project", { project }),
   deleteProject: (id: string) => invoke<void>("delete_project", { id }),
   inspectProject: (rootPath: string) => invoke<{ scripts: Record<string, string>; outputCandidates: string[]; hasPnpmWorkspace: boolean }>("inspect_project", { rootPath }),
+  pickProjectDirectory: () => invoke<string | null>("pick_project_directory"),
+  pickPrivateKey: () => invoke<string | null>("pick_private_key"),
   testConnection: (server: unknown) => invoke<void>("test_ssh_connection", { server }),
 };
 
