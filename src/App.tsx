@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useDeploymentEvents } from "./hooks/use-deployment-events";
 import { configClient } from "./lib/tauri";
 
@@ -58,11 +58,15 @@ function DeploymentPanel({ deploymentId, progress, logs }: { deploymentId: strin
 }
 
 function ProjectDialog({ onClose }: { onClose: () => void }) {
+  const [rootPath, setRootPath] = useState(""); const [buildCommand, setBuildCommand] = useState("pnpm build"); const [outputDirectory, setOutputDirectory] = useState("dist"); const [servers, setServers] = useState<{ id: string; name: string; deploymentPath: string }[]>([]);
+  useEffect(() => { if (typeof window !== "undefined" && "__TAURI_INTERNALS__" in window) void configClient.get().then((config) => setServers(config.servers)).catch(() => undefined); }, []);
+  const browse = async () => { const path = await configClient.pickProjectDirectory(); if (!path) return; setRootPath(path); const inspected = await configClient.inspectProject(path); const preferredScript = Object.keys(inspected.scripts).find((name) => name === "build") ?? Object.keys(inspected.scripts).find((name) => name.startsWith("build")); if (preferredScript) setBuildCommand(`pnpm ${preferredScript}`); if (inspected.outputCandidates[0]) setOutputDirectory(inspected.outputCandidates[0]); };
+  const submit = async (event: React.FormEvent<HTMLFormElement>) => { event.preventDefault(); const fields = new FormData(event.currentTarget); await configClient.saveProject({ id: crypto.randomUUID(), name: fields.get("name"), rootPath, buildCommand, outputDirectory, serverId: fields.get("serverId"), remotePath: fields.get("remotePath"), cleanRemoteBeforeDeploy: fields.get("clean") === "on" }); onClose(); };
   return <div className="dialog-backdrop" role="presentation"><section className="dialog" role="dialog" aria-modal="true" aria-labelledby="project-form-title">
     <header><div><p className="eyebrow">NEW DEPLOYMENT TARGET</p><h2 id="project-form-title">添加项目</h2></div><button className="close" aria-label="关闭表单" onClick={onClose}>×</button></header>
-    <div className="form-grid"><label>项目名称<input placeholder="例如：官网前端" /></label><label>本地项目文件夹<div className="path-input"><input placeholder="选择项目根目录" /><button type="button">浏览</button></div></label><label>打包命令<input aria-label="打包命令" defaultValue="pnpm build" /></label><label>输出目录<input defaultValue="dist" /></label><label>服务器<select defaultValue=""><option value="" disabled>请选择已保存的服务器</option></select></label><label>服务器目录<input placeholder="/var/www/site" /></label></div>
-    <label className="danger-row"><input type="checkbox" /> <span><b>部署前清空远程目录</b><small>此操作不可恢复，默认使用增量覆盖。</small></span></label>
-    <footer><button className="ghost" onClick={onClose}>取消</button><button className="primary" onClick={onClose}>保存项目</button></footer>
+    <form onSubmit={(event) => void submit(event)}><div className="form-grid"><label>项目名称<input name="name" required placeholder="例如：官网前端" /></label><label>本地项目文件夹<div className="path-input"><input value={rootPath} readOnly placeholder="选择项目根目录" /><button type="button" onClick={() => void browse()}>浏览</button></div></label><label>打包命令<input aria-label="打包命令" value={buildCommand} onChange={(event) => setBuildCommand(event.target.value)} /></label><label>输出目录<input value={outputDirectory} onChange={(event) => setOutputDirectory(event.target.value)} /></label><label>服务器<select name="serverId" required defaultValue=""><option value="" disabled>请选择已保存的服务器</option>{servers.map((server) => <option value={server.id} key={server.id}>{server.name}</option>)}</select></label><label>服务器目录<input name="remotePath" required placeholder="/var/www/site" /></label></div>
+    <label className="danger-row"><input name="clean" type="checkbox" /> <span><b>部署前清空远程目录</b><small>此操作不可恢复，默认使用增量覆盖。</small></span></label>
+    <footer><button className="ghost" type="button" onClick={onClose}>取消</button><button className="primary" type="submit">保存项目</button></footer></form>
   </section></div>;
 }
 
