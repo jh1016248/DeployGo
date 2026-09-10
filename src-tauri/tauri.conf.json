@@ -23,6 +23,7 @@
     }
   },
   "bundle": {
-    "active": true
+    "active": true,
+    "icon": ["icons/icon.icns", "icons/icon.png"]
   }
 }
