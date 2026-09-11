@@ -77,4 +77,5 @@ test("opens a saved project in edit mode", async () => {
   await user.click(screen.getByRole("button", { name: "编辑项目" }));
   expect(screen.getByRole("heading", { name: "编辑项目" })).toBeVisible();
   expect(screen.getByLabelText("打包命令")).toHaveValue("pnpm build");
+  expect(screen.getByRole("combobox")).toHaveValue("srv-3");
 });
