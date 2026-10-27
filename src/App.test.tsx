@@ -3,11 +3,14 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 const apiMocks = vi.hoisted(() => ({ invoke: vi.fn() }));
+const eventMocks = vi.hoisted(() => ({ handlers: {} as Record<string, (event: { payload: unknown }) => void> }));
 vi.mock("@tauri-apps/api/core", () => ({ invoke: apiMocks.invoke }));
-vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn().mockResolvedValue(() => undefined) }));
+vi.mock("@tauri-apps/api/event", () => ({ listen: vi.fn((name: string, handler: (event: { payload: unknown }) => void) => { eventMocks.handlers[name] = handler; return Promise.resolve(() => undefined); }) }));
+import { act } from "react";
 import App from "./App";
+import { formatDeployTime } from "./lib/datetime";
 
-beforeEach(() => apiMocks.invoke.mockReset());
+beforeEach(() => { apiMocks.invoke.mockReset(); eventMocks.handlers = {}; });
 afterEach(() => { delete (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__; });
 
 test("renders the DeployGo project empty state", () => {
@@ -78,4 +81,21 @@ test("opens a saved project in edit mode", async () => {
   expect(screen.getByRole("heading", { name: "编辑项目" })).toBeVisible();
   expect(screen.getByLabelText("打包命令")).toHaveValue("pnpm build");
   expect(screen.getByRole("combobox")).toHaveValue("srv-3");
+});
+test("refreshes the project card when a deployment completes", async () => {
+  (window as Window & { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ = {};
+  const server = { id: "srv-9", name: "生产", host: "203.0.113.10", port: 22, username: "deploy", authType: "password", password: "secret", createdAt: "2026-01-01", updatedAt: "2026-01-01" };
+  const before = { id: "dep-1", startedAt: "1793160000", finishedAt: "1793160000", status: "success", filesUploaded: 2 };
+  const after = { id: "dep-2", startedAt: "1793250000", finishedAt: "1793250000", status: "success", filesUploaded: 3 };
+  const baseProject = { id: "project-9", name: "官网", rootPath: "/tmp/site", buildCommand: "pnpm build", outputDirectory: "dist", serverId: "srv-9", remotePath: "/var/www/site", cleanRemoteBeforeDeploy: false };
+  let current = { ...baseProject, lastDeployment: before };
+  apiMocks.invoke.mockImplementation((command: string) => {
+    if (command === "get_configs") return Promise.resolve({ servers: [server], projects: [current] });
+    return Promise.resolve("dep-2");
+  });
+  render(<App />);
+  await screen.findByText(formatDeployTime("1793160000"));
+  current = { ...baseProject, lastDeployment: after };
+  await act(async () => { eventMocks.handlers["deployment://complete"]?.({ payload: { deploymentId: "dep-2", projectId: "project-9", data: { status: "success" } } }); });
+  await screen.findByText(formatDeployTime("1793250000"));
 });

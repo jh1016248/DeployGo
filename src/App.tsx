@@ -26,7 +26,12 @@ function App() {
   const testServer = async (server: ServerConfig) => { setServerTests((current) => ({ ...current, [server.id]: "正在测试…" })); try { await configClient.testConnection(server); setServerTests((current) => ({ ...current, [server.id]: "连接成功" })); } catch (error) { setServerTests((current) => ({ ...current, [server.id]: error instanceof Error ? error.message : "连接失败" })); } };
   const deployProject = async (projectId: string) => { try { const deploymentId = await deploymentClient.start(projectId); setHiddenLogs((current) => current.filter((id) => id !== deploymentId)); setActiveDeployments((current) => ({ ...current, [projectId]: deploymentId })); setNotice(true); } catch { setNotice(true); } };
   const cancelProject = async (projectId: string) => { const deploymentId = activeDeployments[projectId]; if (!deploymentId) return; await deploymentClient.cancel(deploymentId); };
-  useEffect(() => { const completeIds = new Set(Object.keys(deployment.completed)); setActiveDeployments((current) => Object.fromEntries(Object.entries(current).filter(([, id]) => !completeIds.has(id)))); }, [deployment.completed]);
+  useEffect(() => {
+    const completeIds = new Set(Object.keys(deployment.completed));
+    if (!completeIds.size) return;
+    setActiveDeployments((current) => Object.fromEntries(Object.entries(current).filter(([, id]) => !completeIds.has(id))));
+    void loadConfigs().catch(() => undefined);
+  }, [deployment.completed]);
 
   return (
     <div className="app-shell">
