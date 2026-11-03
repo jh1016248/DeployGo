@@ -1,14 +1,35 @@
-use std::{path::Path, process::Stdio, time::Duration};
+use std::{fs, path::{Path, PathBuf}, process::Stdio, time::Duration};
 use tokio::{io::{AsyncBufReadExt, AsyncRead, BufReader}, process::Command, sync::mpsc, time::sleep};
 use tokio_util::sync::CancellationToken;
 use crate::{deploy::cancellation_point, error::AppError, models::ProjectConfig};
 
-pub fn validate_output_directory(project: &ProjectConfig) -> Result<(), AppError> {
-    let output = Path::new(&project.root_path).join(&project.output_directory);
-    if output.is_dir() { Ok(()) } else { Err(AppError::Validation(format!("构建完成，但未找到输出目录 {}", project.output_directory))) }
+pub fn validate_output_directory(project: &ProjectConfig) -> Result<PathBuf, AppError> {
+    let root = Path::new(&project.root_path);
+    let name = project.output_directory.trim();
+    if name.is_empty() { return Err(AppError::Validation("输出目录不能为空".into())); }
+    let direct = root.join(name);
+    if direct.is_dir() { return Ok(direct); }
+    if root.join("package.json").is_file() {
+        if let Some(found) = find_output_directory(root, name, 3) { return Ok(found); }
+    }
+    Err(AppError::Validation(format!("构建完成，但未找到输出目录 {}（已检查 {}）", name, direct.display())))
 }
 
-pub async fn run_build<F>(project: &ProjectConfig, token: CancellationToken, mut on_log: F) -> Result<(), AppError>
+fn find_output_directory(root: &Path, name: &str, depth: usize) -> Option<PathBuf> {
+    if depth == 0 { return None; }
+    for entry in fs::read_dir(root).ok()?.flatten() {
+        let path = entry.path();
+        let file_name = path.file_name()?.to_str()?.to_owned();
+        if !path.is_dir() || file_name.starts_with('.') || file_name == "node_modules" { continue; }
+        if file_name == name { return Some(path); }
+        if depth > 1 {
+            if let Some(found) = find_output_directory(&path, name, depth - 1) { return Some(found); }
+        }
+    }
+    None
+}
+
+pub async fn run_build<F>(project: &ProjectConfig, token: CancellationToken, mut on_log: F) -> Result<PathBuf, AppError>
 where F: FnMut(String) {
     cancellation_point(token.clone())?;
     let mut command = shell_command(&project.build_command);
