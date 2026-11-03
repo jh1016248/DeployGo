@@ -35,13 +35,21 @@ fn deployment_config(repository: &State<'_, Mutex<ConfigRepository>>, id: &str) 
 
 async fn run_deployment(app: &AppHandle, deployment_id: &str, project: &ProjectConfig, server: &ServerConfig, token: tokio_util::sync::CancellationToken) -> Result<usize, String> {
     emit(app, "deployment://progress", deployment_id, &project.id, serde_json::json!({"phase": "building", "percent": 5}));
-    build::run_build(project, token.clone(), |line| emit(app, "deployment://log", deployment_id, &project.id, serde_json::json!({"level": "info", "message": line}))).await.map_err(String::from)?;
+    if let Err(error) = build::run_build(project, token.clone(), |line| emit(app, "deployment://log", deployment_id, &project.id, serde_json::json!({"level": "info", "message": line}))).await {
+        emit(app, "deployment://log", deployment_id, &project.id, serde_json::json!({"level": "error", "message": format!("构建失败：{}", error.user_message())}));
+        return Err(error.user_message());
+    }
     emit(app, "deployment://progress", deployment_id, &project.id, serde_json::json!({"phase": "uploading", "percent": 30}));
+    emit(app, "deployment://log", deployment_id, &project.id, serde_json::json!({"level": "info", "message": format!("正在连接 {}@{}:{}（SSH 认证中，超时 10 秒）…", server.username, server.host, server.port)}));
     emit(app, "deployment://log", deployment_id, &project.id, serde_json::json!({"level": "info", "message": format!("开始上传输出目录到 {}", project.remote_path)}));
     if project.clean_remote_before_deploy { emit(app, "deployment://log", deployment_id, &project.id, serde_json::json!({"level": "warning", "message": "正在清空远程目录（此操作不可恢复）"})); }
     let app_handle = app.clone(); let id = deployment_id.to_owned(); let project_id = project.id.clone(); let server = server.clone(); let output = Path::new(&project.root_path).join(&project.output_directory); let remote = project.remote_path.clone(); let clean_remote = project.clean_remote_before_deploy;
     tauri::async_runtime::spawn_blocking(move || {
-        let mut total = 0; sftp::deploy_output(&server, &output, Path::new(&remote), clean_remote, token, |file, current, count| { total = count; emit(&app_handle, "deployment://log", &id, &project_id, serde_json::json!({"level": "info", "message": format!("已上传 ({}/{}) {}", current, count, file.relative_path.display())})); let percent = 30 + ((current * 70) / count.max(1)); emit(&app_handle, "deployment://progress", &id, &project_id, serde_json::json!({"phase": "uploading", "file": file.relative_path, "completedFiles": current, "totalFiles": count, "percent": percent})); }).map(|_| total)
+        let mut total = 0; let upload = sftp::deploy_output(&server, &output, Path::new(&remote), clean_remote, token, |file, current, count| { total = count; emit(&app_handle, "deployment://log", &id, &project_id, serde_json::json!({"level": "info", "message": format!("已上传 ({}/{}) {}", current, count, file.relative_path.display())})); let percent = 30 + ((current * 70) / count.max(1)); emit(&app_handle, "deployment://progress", &id, &project_id, serde_json::json!({"phase": "uploading", "file": file.relative_path, "completedFiles": current, "totalFiles": count, "percent": percent})); });
+        match upload {
+            Ok(()) => { emit(&app_handle, "deployment://log", &id, &project_id, serde_json::json!({"level": "success", "message": format!("上传完成，共 {} 个文件", total)})); Ok(total) }
+            Err(error) => { emit(&app_handle, "deployment://log", &id, &project_id, serde_json::json!({"level": "error", "message": format!("上传失败：{}", error.user_message())})); Err(error) }
+        }
     }).await.map_err(|_| "上传任务异常结束".to_string())?.map_err(String::from)
 }
 
